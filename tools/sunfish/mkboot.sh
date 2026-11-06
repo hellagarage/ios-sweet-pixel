@@ -10,7 +10,7 @@
 # It also adds GPU-GMU-MEM, 1 MiB of zeros that sweet_gmu.c (kernel 0100+) maps for the
 # GMU (page tables, HFI queues, cache backing); no vendor data.
 set -euo pipefail
-R="/mnt/c/Users/frokfrdk/Documents/ios 16 on Google Pixel 4a/ios-sweet-pixel"
+R="$(cd "$(dirname "$0")/../.." && pwd)"
 export PATH=~/.local/bin:$PATH
 cd "$R"
 K="$1/kernel.development.sweet"; NAME=$2; EXTRA=${3:-}

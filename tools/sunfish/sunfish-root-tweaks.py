@@ -134,6 +134,7 @@ with open(os.path.join(root, rel), 'r+b') as f:
 
 if wallpaper:
     sbdir = os.path.join(root, 'private/var/mobile/Library/SpringBoard')
+    os.makedirs(sbdir, exist_ok=True)
     with open(wallpaper, 'rb') as f:
         data = f.read()
     assert struct.unpack('<I', data[-4:])[0] in (0xDCB543A2, 0xCBA43291), \
@@ -144,6 +145,10 @@ if wallpaper:
             f.write(data)
         os.chown(path, 501, 501)
         os.chmod(path, 0o644)
+    try:
+        os.chown(sbdir, 501, 501)
+    except OSError:
+        pass
     print(f'wallpaper: {wallpaper} -> {sbdir}/{{Lock,Home}}Background.cpbitmap ({len(data)} bytes)')
 
 if migrate_once:

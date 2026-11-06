@@ -1,0 +1,103 @@
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -117,6 +117,7 @@
+ bsd/dev/sweet_cp.c			standard
+ bsd/dev/sweet_zap.c			standard
+ bsd/dev/sweet_gsvc.c			standard
++bsd/dev/sweet_wifi.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -55,6 +55,7 @@
+ extern void sweet_cpufreq_init(void);
+ extern void sweet_gpu_init(void);
+ extern void sweet_usb_probe(void);
++extern void sweet_wifi_probe(void);
+ 
+ #define REG_CAP         0x00
+@@ -679,6 +680,7 @@
+ 	sweet_cpufreq_init();
+ 	sweet_gpu_init();
+ 	sweet_usb_probe();
++	sweet_wifi_probe();
+ 	return 0;
+ }
+ 
+--- /dev/null
++++ b/bsd/dev/sweet_wifi.c
+@@ -0,0 +1,99 @@
++/*
++ * SUNFISH: WCN3990 Wi-Fi bring-up, stage 1 — read-only probe.
++ *
++ * Pixel 4a (google,sunfish) uses a SNoC-attached WCN3990 (Linux ath10k,
++ * compatible qcom,wcn3990-wifi). Mainline DT:
++ *   reg = <0x18800000 0x800000>  ("membase")
++ *   memory-region wlan_msa_mem @ 0x98d00000 (2 MiB)
++ *   qcom,ath10k-calibration-variant = "google_sunfish"
++ *
++ * Boot-arg sweetwifi=N (docs/WIFI_WCN3990_PLAN.md):
++ *   0 = off (default)
++ *   1 = this probe: map a small window of membase and print a few words
++ *       if the mapping succeeds. Do not enable on a hang-prone image
++ *       until you can recover via fastboot; unpowered WCSS MMIO can wedge.
++ *   2+ = later patches (power, firmware, WMI, ifnet)
++ *
++ * No writes. No firmware. No ifnet yet.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++void sweet_wifi_probe(void);
++
++#define WIFI_MEMBASE_PA         0x18800000u
++#define WIFI_PROBE_MAP_SIZE     0x1000u          /* first page only for N=1 */
++#define WIFI_MSA_PA             0x98d00000u
++#define WIFI_MSA_SIZE           0x200000u
++
++static uint32_t
++wifi_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return v;
++}
++
++void
++sweet_wifi_probe(void)
++{
++	int stage = 0;
++	vm_offset_t mem;
++
++	PE_parse_boot_argn("sweetwifi", &stage, sizeof(stage));
++	if (stage < 1) {
++		return;
++	}
++
++	printf("SWEET WIFI: stage %d probe (WCN3990 membase 0x%08x msa 0x%08x+%#x variant google_sunfish)\n",
++	    stage, WIFI_MEMBASE_PA, WIFI_MSA_PA, WIFI_MSA_SIZE);
++
++	/*
++	 * N=1 only maps and peeks. Power/clock gating is unknown until
++	 * stage 2 votes the WCSS regulators; a hang here means leave
++	 * sweetwifi=0 and recover via fastboot.
++	 */
++	mem = ml_io_map(WIFI_MEMBASE_PA, WIFI_PROBE_MAP_SIZE);
++	if (mem == 0) {
++		printf("SWEET WIFI: membase map failed\n");
++		return;
++	}
++	printf("SWEET WIFI: membase[0]=0x%08x [4]=0x%08x [8]=0x%08x [0xc]=0x%08x\n",
++	    wifi_rd(mem, 0x0), wifi_rd(mem, 0x4),
++	    wifi_rd(mem, 0x8), wifi_rd(mem, 0xc));
++
++	if (stage >= 2) {
++		printf("SWEET WIFI: stage %d power/firmware not in this patch (need 0113+)\n",
++		    stage);
++	}
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
